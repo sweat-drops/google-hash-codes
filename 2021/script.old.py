@@ -53,58 +53,36 @@ for file_name in file_names:
 
         cars.append(Car(i, int(words[0]), car_streets))
 
-    outputs = [] # [id, [[streetName, seconds]]]
+    outputs = []
     score = 0
-
-    max_seconds = 5
 
     for intersection in intersections.values():
         valid_streets = [s for s in intersection.in_streets if s.car_total > 0]
         valid_streets.sort(key=lambda x: x.car_total, reverse=True)
+        if (len(valid_streets) > 0):
+            outputs.append([intersection.id, valid_streets])
 
-        total_cars = sum([s.car_total for s in intersection.in_streets])
-        if total_cars == 0:
-            continue
+    total_car_per_intersection = {}
 
-        selected_streets = []
-        for street in intersection.in_streets:
-            if street.car_total == 0:
-                continue
+    for key, intersection in intersections.items():
+        total_car_per_intersection[key] = sum([s.car_total for s in intersection.in_streets])
 
-            perc = street.car_total / total_cars
-            seconds = int(perc * max_seconds + 1)
-
-            if seconds > 0:
-                selected_streets.append([street.name, seconds])
-
-        for n in range(int(max_seconds / 2), 0, -1):
-            all_divisible = True
-
-            for selected_street in selected_streets:
-                if selected_street[1] % n != 0:
-                    all_divisible = False
-                    break
-            
-            if all_divisible:
-                for i, selected_street in enumerate(selected_streets):
-                    selected_streets[i] = [ selected_street[0], int(selected_street[1] / n)]
-
-        if (len(selected_streets) > 0):
-            outputs.append([intersection.id, selected_streets])
 
     # Calc outputs & score
     out_file.write(f"{len(outputs)}\n")
     for output in outputs:
+        intersection_id = output[0]
+        intersection = intersections[intersection_id]
+        
+        # total_car_per_intersection = sum([s.total_car for s in intersection.in_street])
+        
+        totals = sum([s.car_total for s in output[1]])
+        cycle_time = max(1, totals / 10)
+        #avg_intersections = sum([len(c.streets) for c in cars]) / len(cars)
+        #avg_street_in = sum([len(intersection.in_streets) for intersection in intersections.values()]) / len(intersections)
+
         out_file.write(f"{output[0]}\n")
         out_file.write(f"{len(output[1])}\n")
         for street in output[1]:
-            out_file.write(f"{street[0]} {street[1]}\n")
+            out_file.write(f"{street.name} {max(1, int(street.car_total * cycle_time / totals))}\n")
 
-# calculate score
-
-# for file_name in file_names:
-#     with open('in/' + file_name + '.txt', 'r') as in_f:
-#         with open(file_name + '.out', 'r') as out_f:
-#             duration, n_intersections, n_streets, n_cars, prize = map(int, in_file.readline().split())
-#             n_intersections_out = int(f_out.readlines())
-            
