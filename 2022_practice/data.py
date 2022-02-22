@@ -3,7 +3,7 @@ class Client:
     likes = set()
     dislikes = set()
 
-    incompatibility: set[int] = set()
+    incompatibility = set()
 
     def __init__(self, id) -> None:
         self.id = id
@@ -38,7 +38,7 @@ class Client:
 
 class ClientRepo:
     
-    data: dict[str, Client] = {}
+    data = {}
 
     def __init__(self) -> None:
         data = {}
@@ -119,7 +119,7 @@ class Ingredient:
 class IngrRepo:
 
     selected = set()
-    data: dict[str, Ingredient] = {}
+    data = {}
 
     def __init__(self) -> None:
         selected = set()
