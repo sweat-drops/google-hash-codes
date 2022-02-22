@@ -1,10 +1,6 @@
 #!/usr/local/bin/python3
 
 import copy
-from pydoc import cli
-from select import select
-
-from numpy import True_, clip
 from data import Client, ClientRepo, IngrRepo, Ingredient
 import sys
 import random
