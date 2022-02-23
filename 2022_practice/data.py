@@ -26,15 +26,18 @@ class Client:
     def addIncompatibility(self, id):
         self.incompatibility.add(id)
 
+    def removeIncompatibility(self, id):
+        self.incompatibility.remove(id)
+
     def score(self, clientRepo):
         if len(self.incompatibility) == 0:
-            return -100
+            return -10000
 
         incompatibles = 0
         for clientId in self.incompatibility:
             if clientRepo.has(clientId):
                 incompatibles += len(clientRepo.get(clientId).incompatibility)
-        return len(self.incompatibility) * 1000 - incompatibles
+        return len(self.incompatibility) * 50 - incompatibles
 
 class ClientRepo:
     
@@ -66,7 +69,7 @@ class ClientRepo:
 
         for incompatible in client.incompatibility:
             if self.has(incompatible):
-                self.get(incompatible).incompatibility.remove(id)
+                self.get(incompatible).removeIncompatibility(id)
         del self.data[id]
 
     def check_compatibility(self, firstId, secondId):

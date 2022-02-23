@@ -4,6 +4,7 @@ import copy
 from data import Client, ClientRepo, IngrRepo, Ingredient
 import sys
 import random
+import threading
 
 if len(sys.argv) <= 1:
     print("Manca il tipo di calcolo ('client', 'ingr)")
@@ -118,124 +119,197 @@ def reset_original(origClients, origIngr):
 def calc_score(origClientRepo, selected):
     score = 0
     for client in origClientRepo.data.values():
-        valid = True
-        for liked in client.likes:
-            if not liked in selected:
-                valid = False
-                break
-        if not valid:
-            continue
-        for disliked in client.dislikes:
-            if disliked in selected:
-                valid = False
-                break
-        if valid:
+        if is_satisfied(client, selected):
             score = score + 1
     return score
+
+def is_satisfied(client: Client, selected):
+    for liked in client.likes:
+        if not liked in selected:
+            return False
+    for disliked in client.dislikes:
+        if disliked in selected:
+            return False
+    return True
+
+def client_swipe(client, data, lock = None):
+    tempSelected = copy.deepcopy(data['selected'])
+
+    if not is_satisfied(client, data['selected']):
+        # Lo aggiungo
+        for liked in client.likes:
+            tempSelected.add(liked)
+
+        for disliked in client.dislikes:
+            if disliked in tempSelected:
+                tempSelected.remove(disliked)
+    else:
+        # Lo rimuovo
+        for liked in client.likes:
+            if liked in tempSelected:
+                tempSelected.remove(liked)
+
+        #for disliked in client.dislikes:
+        #    tempSelected.add(disliked)
+    
+    tempScore = calc_score(origClientsRepo, tempSelected)
+
+    if tempScore >= data['score']:
+        isMax = tempScore > data['score']
+        if lock != None:
+            lock.acquire()
+        
+        if isMax or random.random() > 0.5:
+            data['score'] = tempScore
+            data['selected'] = tempSelected
+
+        if isMax:
+            print(f"NUOVO MAX: {data['score']}")
+            write_output(data['selected'])
+        if lock != None:
+            lock.release()
+
+def ingredient_swipe(ingr, data, lock = None):
+    tempSelected = copy.deepcopy(data['selected'])
+
+    if not ingr in tempSelected:
+        tempSelected.add(ingr)
+    else:
+        tempSelected.remove(ingr)
+
+    tempScore = calc_score(origClientsRepo, tempSelected)
+
+    if tempScore >= data['score']:
+        isMax = tempScore > data['score']
+        if lock != None:
+            lock.acquire()
+        
+        if isMax or random.random() > 0.5:
+            data['score'] = tempScore
+            data['selected'] = tempSelected
+
+        if isMax:
+            print(f"NUOVO MAX: {data['score']}")
+            write_output(data['selected'])
+        if lock != None:
+            lock.release()
+
 
 def swipe_clients(selected, score):
     clientIds =  list(origClientsRepo.data.keys())
 
     ingredients =  list(origIngrRepo.data.keys())
 
+    data = { 'selected': selected, 'score': score}
+
     while True:
         completed = True
         random.shuffle(clientIds)
-        for i, client in enumerate(clientIds):
 
+        lock = threading.Lock()
+        
+        i = 0
+        while i < len(clientIds):
             if i > 0 and i % 500 == 0:
-                print(f"{score}\t{i}/{C} Clients")
-            tempSelected = copy.deepcopy(selected)
+                print(f"{data['score']}\t{i}/{C} Clients")
 
-            if not clientRepo.has(client):
-                # Lo aggiungo
-                for liked in origClientsRepo.get(client).likes:
-                    if not liked in tempSelected:
-                        tempSelected.add(liked)
+            threads = []
 
-                for disliked in origClientsRepo.get(client).dislikes:
-                    if disliked in tempSelected:
-                        tempSelected.remove(disliked)
-            else:
-                # Lo rimuovo
-                for liked in origClientsRepo.get(client).likes:
-                    if liked in tempSelected:
-                        tempSelected.remove(liked)
+            for _ in range(0, 10):
+                if i < len(clientIds):
+                    th = threading.Thread(target=client_swipe, args=(origClientsRepo.get(clientIds[i]), data, lock))
+                    th.start()
+                    threads.append(th)
+                    i = i + 1
+            for th in threads:
+                th.join()
 
-                for disliked in origClientsRepo.get(client).dislikes:
-                    if not disliked in tempSelected:
-                        tempSelected.add(disliked)
-            
-            tempScore = calc_score(origClientsRepo, tempSelected)
-
-            if tempScore >= score:
-                isMax = tempScore > score
-
-                score = tempScore
-                selected = tempSelected
-
-                if isMax:
-                    print(f"NUOVO MAX: {score}")
-                    write_output(selected)
-                    completed = False
-                    break
 
         random.shuffle(ingredients)
-        for i, ingr in enumerate(ingredients):
+        i = 0
+        while i < len(ingredients):
             if i > 0 and i % 500 == 0:
-                print(f"{score}\t{i}/{I} Ingr")
-            tempSelected = copy.deepcopy(selected)
+                print(f"{data['score']}\t{i}/{I} Ingredients")
 
-            if not ingr in tempSelected:
-                tempSelected.add(ingr)
-            else:
-                tempSelected.remove(ingr)
+            threads = []
 
-            tempScore = calc_score(origClientsRepo, tempSelected)
+            for _ in range(0, 10):
+                if i < len(ingredients):
+                    th = threading.Thread(target=ingredient_swipe, args=(ingredients[i], data, lock))
+                    th.start()
+                    threads.append(th)
+                    i = i + 1
+            for th in threads:
+                th.join()
 
-            if tempScore >= score:
-                isMax = tempScore > score
-
-                score = tempScore
-                selected = tempSelected
-
-                if isMax:
-                    print(f"NUOVO MAX: {score}")
-                    write_output(selected)
-                    completed = False
-                    break
-
-        if completed:
-            print(f"COMPLETATO: {score}")
-            break
+        #if completed:
+        #    print(f"Completed {score}")
+        #    break
     return selected, score
 
-def swipe_ingredients_batch(selected, score):
-    ingredients =  list(origIngrRepo.data.keys())
+def double_swipe_clients(selected, score):
+    clientIds =  list(origClientsRepo.data.keys())
+    random.shuffle(clientIds)
 
-    while True:
-        random.shuffle(ingredients)
+    for i in range(0, len(clientIds) - 1):
+        client = clientIds[i]
+        tempSelected = copy.deepcopy(selected)
 
-        i = 0
-        while (i + 1) * 3 < len(ingredients):
-            tempSelected = copy.deepcopy(selected)
-            for ingr in ingredients[i:i+3]:
-                if not ingr in tempSelected:
-                    tempSelected.add(ingr)
-                else:
-                    tempSelected.remove(ingr)
-        
-            tempScore = calc_score(origClientsRepo, tempSelected)
+        if i > 0 and i % 100 == 0:
+                print(f"{score}\t{i}/{C} double swap Clients")
 
-            if tempScore >= score:
-                isMax = tempScore > score
+        if not clientRepo.has(client):
+            # Lo aggiungo
+            for liked in origClientsRepo.get(client).likes:
+                if not liked in tempSelected:
+                    tempSelected.add(liked)
 
+            for disliked in origClientsRepo.get(client).dislikes:
+                if disliked in tempSelected:
+                    tempSelected.remove(disliked)
+        else:
+            # Lo rimuovo
+            for liked in origClientsRepo.get(client).likes:
+                if liked in tempSelected:
+                    tempSelected.remove(liked)
+
+            for disliked in origClientsRepo.get(client).dislikes:
+                if not disliked in tempSelected:
+                    tempSelected.add(disliked)
+
+        for j in range(i+1, len(clientIds)):
+            lastTempSelected = copy.deepcopy(tempSelected)
+
+            secondClient = clientIds[j]
+
+            if not clientRepo.has(secondClient):
+                # Lo aggiungo
+                for liked in origClientsRepo.get(secondClient).likes:
+                    if not liked in tempSelected:
+                        lastTempSelected.add(liked)
+
+                for disliked in origClientsRepo.get(secondClient).dislikes:
+                    if disliked in tempSelected:
+                        lastTempSelected.remove(disliked)
+            else:
+                # Lo rimuovo
+                for liked in origClientsRepo.get(secondClient).likes:
+                    if liked in tempSelected:
+                        lastTempSelected.remove(liked)
+
+                for disliked in origClientsRepo.get(secondClient).dislikes:
+                    if not disliked in tempSelected:
+                        lastTempSelected.add(disliked)
+            tempScore = calc_score(origClientsRepo, lastTempSelected)
+            if tempScore > score:
+                selected = lastTempSelected
                 score = tempScore
-                selected = tempSelected
-
-                if isMax:
-                    print(f"NUOVO MAX: {score}")
-                    write_output(selected)
+            
+                print(f"NUOVO MAX: {score}")
+                write_output(selected)
+                break
+    
+    print(f"FINAL: {score}")
     return selected, score
 
 I = len(origIngrRepo.data)
@@ -245,7 +319,6 @@ print(f"C: {C}, I: {I}")
 target = 0
 if type == 'ingr':
     select_by_ingredients()
-    score = calc_score(origClientsRepo, ingrRepo.selected)
 
 else:
     # Select by clients
@@ -269,4 +342,4 @@ score = calc_score(origClientsRepo, ingrRepo.selected)
 print(f"Score {score}, usati {len(ingrRepo.selected)} ingr")
 selected, score = swipe_clients(ingrRepo.selected, score)
 
-swipe_ingredients_batch(selected, score)
+selected, score = double_swipe_clients(ingrRepo.selected, score)
